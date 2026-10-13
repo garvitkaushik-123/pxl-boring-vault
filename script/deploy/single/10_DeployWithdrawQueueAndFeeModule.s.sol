@@ -34,6 +34,9 @@ contract DeployWithdrawQueueAndFeeModule is BaseScript {
             config.withdrawQueueFeeRecipient == config.protocolAdmin,
             "withdrawQueueFeeRecipient must be the protocol admin"
         );
+        require(
+            config.withdrawQueueRecoveryAddress != address(0), "withdrawQueueRecoveryAddress must not be zero address"
+        );
         require(config.teller != address(0), "teller must not be zero address");
         require(
             config.withdrawQueueProcessorAddress != address(0), "withdrawQueueProcessorAddress must not be zero address"
@@ -81,31 +84,7 @@ contract DeployWithdrawQueueAndFeeModule is BaseScript {
 
         require(WithdrawQueueAssetSpecificFeeModule(feeModule).owner() == config.protocolAdmin, "owner mismatch");
 
-        // Deploy the Withdraw Queue
-        bytes32 withdrawQueueSalt = makeSalt(
-            broadcaster,
-            false,
-            string(
-                abi.encodePacked(config.nameEntropy, ":WithdrawQueue", config.withdrawQueueModuleSpecificNameEntropy)
-            )
-        );
-        bytes memory withdrawQueueCreationCode = type(WithdrawQueue).creationCode;
-        address withdrawQueue = CREATEX.deployCreate3(
-            withdrawQueueSalt,
-            abi.encodePacked(
-                withdrawQueueCreationCode,
-                abi.encode(
-                    config.withdrawQueueName,
-                    config.withdrawQueueSymbol,
-                    config.withdrawQueueFeeRecipient,
-                    config.teller,
-                    feeModule,
-                    config.withdrawQueueMinimumOrderSize,
-                    broadcaster,
-                    broadcaster
-                )
-            )
-        );
+        address withdrawQueue = _deployWithdrawQueue(config, feeModule);
         config.withdrawQueue = withdrawQueue;
 
         // Post Deploy Checks
@@ -132,7 +111,10 @@ contract DeployWithdrawQueueAndFeeModule is BaseScript {
             "the withdraw queue minimum order size must match the config"
         );
         require(queue.owner() == broadcaster, "the withdraw queue owner must be the broadcaster");
-        require(queue.recoveryAddress() == broadcaster, "the withdraw queue recovery address must be the broadcaster");
+        require(
+            queue.recoveryAddress() == config.withdrawQueueRecoveryAddress,
+            "the withdraw queue recovery address must match the config"
+        );
 
         // Set Role Capabilities
         RolesAuthority(config.rolesAuthority)
@@ -154,6 +136,33 @@ contract DeployWithdrawQueueAndFeeModule is BaseScript {
             .setUserRole(config.withdrawQueueProcessorAddress, WITHDRAW_QUEUE_PROCESSOR_ROLE, true);
 
         return address(withdrawQueue);
+    }
+
+    /// @dev Split out of `_deploy` to stay under the stack limit.
+    function _deployWithdrawQueue(ConfigReader.Config memory config, address feeModule) internal returns (address) {
+        bytes32 withdrawQueueSalt = makeSalt(
+            broadcaster,
+            false,
+            string(
+                abi.encodePacked(config.nameEntropy, ":WithdrawQueue", config.withdrawQueueModuleSpecificNameEntropy)
+            )
+        );
+        return CREATEX.deployCreate3(
+            withdrawQueueSalt,
+            abi.encodePacked(
+                type(WithdrawQueue).creationCode,
+                abi.encode(
+                    config.withdrawQueueName,
+                    config.withdrawQueueSymbol,
+                    config.withdrawQueueFeeRecipient,
+                    config.teller,
+                    feeModule,
+                    config.withdrawQueueMinimumOrderSize,
+                    broadcaster,
+                    config.withdrawQueueRecoveryAddress
+                )
+            )
+        );
     }
 
 }
