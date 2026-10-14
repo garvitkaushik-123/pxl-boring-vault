@@ -87,6 +87,7 @@ library ConfigReader {
         string withdrawQueueName;
         string withdrawQueueSymbol;
         address withdrawQueueFeeRecipient;
+        address withdrawQueueRecoveryAddress;
         uint256 withdrawQueueMinimumOrderSize;
         address withdrawQueue;
         address withdrawQueueProcessorAddress;
@@ -216,6 +217,9 @@ library ConfigReader {
         config.withdrawQueueName = _config.readString(".withdrawQueue.name");
         config.withdrawQueueSymbol = _config.readString(".withdrawQueue.symbol");
         config.withdrawQueueFeeRecipient = _config.readAddress(".withdrawQueue.feeRecipient");
+        // Optional at read time so configs of already-deployed vaults still load; the withdraw queue deploy step
+        // rejects a zero value.
+        config.withdrawQueueRecoveryAddress = _config.readAddressOr(".withdrawQueue.recoveryAddress", address(0));
         config.withdrawQueueMinimumOrderSize = uint256(_config.readUint(".withdrawQueue.minimumOrderSize"));
         config.withdrawQueueProcessorAddress = _config.readAddress(".withdrawQueue.processorAddress");
         config.withdrawQueueModuleSpecificNameEntropy =

@@ -34,6 +34,9 @@ contract DeployWithdrawQueueAndFeeModule is BaseScript {
             config.withdrawQueueFeeRecipient == config.protocolAdmin,
             "withdrawQueueFeeRecipient must be the protocol admin"
         );
+        require(
+            config.withdrawQueueRecoveryAddress != address(0), "withdrawQueueRecoveryAddress must not be zero address"
+        );
         require(config.teller != address(0), "teller must not be zero address");
         require(
             config.withdrawQueueProcessorAddress != address(0), "withdrawQueueProcessorAddress must not be zero address"
@@ -81,31 +84,37 @@ contract DeployWithdrawQueueAndFeeModule is BaseScript {
 
         require(WithdrawQueueAssetSpecificFeeModule(feeModule).owner() == config.protocolAdmin, "owner mismatch");
 
-        // Deploy the Withdraw Queue
-        bytes32 withdrawQueueSalt = makeSalt(
-            broadcaster,
-            false,
-            string(
-                abi.encodePacked(config.nameEntropy, ":WithdrawQueue", config.withdrawQueueModuleSpecificNameEntropy)
-            )
-        );
-        bytes memory withdrawQueueCreationCode = type(WithdrawQueue).creationCode;
-        address withdrawQueue = CREATEX.deployCreate3(
-            withdrawQueueSalt,
-            abi.encodePacked(
-                withdrawQueueCreationCode,
-                abi.encode(
-                    config.withdrawQueueName,
-                    config.withdrawQueueSymbol,
-                    config.withdrawQueueFeeRecipient,
-                    config.teller,
-                    feeModule,
-                    config.withdrawQueueMinimumOrderSize,
-                    broadcaster
-                )
-            )
-        );
+        address withdrawQueue = _deployWithdrawQueue(config, feeModule);
         config.withdrawQueue = withdrawQueue;
+
+        // Post Deploy Checks
+        // One assertion per constructor argument: the args are appended to the creation code as an untyped
+        // blob, so a missing or reordered value is not a compile error and can decode to a plausible-looking
+        // value rather than reverting.
+        WithdrawQueue queue = WithdrawQueue(withdrawQueue);
+        require(
+            keccak256(bytes(queue.name())) == keccak256(bytes(config.withdrawQueueName)),
+            "the withdraw queue name must match the config"
+        );
+        require(
+            keccak256(bytes(queue.symbol())) == keccak256(bytes(config.withdrawQueueSymbol)),
+            "the withdraw queue symbol must match the config"
+        );
+        require(
+            queue.feeRecipient() == config.withdrawQueueFeeRecipient,
+            "the withdraw queue fee recipient must match the config"
+        );
+        require(address(queue.tellerWithMultiAssetSupport()) == config.teller, "the withdraw queue teller must match");
+        require(address(queue.feeModule()) == feeModule, "the withdraw queue fee module must match");
+        require(
+            queue.minimumOrderSize() == config.withdrawQueueMinimumOrderSize,
+            "the withdraw queue minimum order size must match the config"
+        );
+        require(queue.owner() == broadcaster, "the withdraw queue owner must be the broadcaster");
+        require(
+            queue.recoveryAddress() == config.withdrawQueueRecoveryAddress,
+            "the withdraw queue recovery address must match the config"
+        );
 
         // Set Role Capabilities
         RolesAuthority(config.rolesAuthority)
@@ -127,6 +136,33 @@ contract DeployWithdrawQueueAndFeeModule is BaseScript {
             .setUserRole(config.withdrawQueueProcessorAddress, WITHDRAW_QUEUE_PROCESSOR_ROLE, true);
 
         return address(withdrawQueue);
+    }
+
+    /// @dev Split out of `_deploy` to stay under the stack limit.
+    function _deployWithdrawQueue(ConfigReader.Config memory config, address feeModule) internal returns (address) {
+        bytes32 withdrawQueueSalt = makeSalt(
+            broadcaster,
+            false,
+            string(
+                abi.encodePacked(config.nameEntropy, ":WithdrawQueue", config.withdrawQueueModuleSpecificNameEntropy)
+            )
+        );
+        return CREATEX.deployCreate3(
+            withdrawQueueSalt,
+            abi.encodePacked(
+                type(WithdrawQueue).creationCode,
+                abi.encode(
+                    config.withdrawQueueName,
+                    config.withdrawQueueSymbol,
+                    config.withdrawQueueFeeRecipient,
+                    config.teller,
+                    feeModule,
+                    config.withdrawQueueMinimumOrderSize,
+                    broadcaster,
+                    config.withdrawQueueRecoveryAddress
+                )
+            )
+        );
     }
 
 }
