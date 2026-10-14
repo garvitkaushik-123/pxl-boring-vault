@@ -83,7 +83,7 @@
     "name": "Example CCIP Withdraw Queue",
     "symbol": "XCCIPWQ",
     "feeRecipient": "0x0000000000417626Ef34D62C4DC189b021603f2F",
-    "recoveryAddress": "0x0000000000417626Ef34D62C4DC189b021603f2F",
+    "recoveryAddress": "0x0000000000000000000000000000000000000000",
     "minimumOrderSize": "1000000",
     "processorAddress": "0x0000000000417626Ef34D62C4DC189b021603f2F"
   }
